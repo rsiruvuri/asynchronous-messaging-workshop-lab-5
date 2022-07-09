@@ -27,6 +27,7 @@ The Asynchronous Messaging Workshop is a collection of individual labs covering 
   * **Lab 2**: Topic-Queue Chaining & Load Balancing
   * **Lab 3**: Scatter-Gather Pattern
   * **Lab 4**: Orchestration and Coordination
+  * **Lab 5**: Messaging & Streaming
 
 * **Prerequisites**:
   * AWS Account
