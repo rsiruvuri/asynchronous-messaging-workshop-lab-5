@@ -121,27 +121,6 @@ Resources:
       #       Queue: !GetAtt InventoryMicroserviceQueue.Arn
       #       BatchSize: 1
 
-  ReplenishInventoryMicroservice:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
-    Properties:
-      CodeUri: replenish-inventory-microservice/
-      Handler: app.lambda_handler
-      Environment:
-        Variables:
-          SERVICE_NAME: ReplenishInventoryMicroservice        
-        #  TOPIC_ARN: !Ref RideReplenishTopic   
-      Policies:
-        # - SNSPublishMessagePolicy: # https://github.com/awslabs/serverless-application-model/blob/develop/samtranslator/policy_templates_data/policy_templates.json
-        #     TopicName: !GetAtt RideReplenishTopic.TopicName        
-
-  # RideReplenishTopic:
-  #   Type: AWS::SNS::Topic
-  #   Properties:
-  #     TopicName: RideReplenishTopic
-  #     Subscription:
-  #       Endpoint: "siruvuri@amazon.com"
-  #       Protocol: email  
-      
   # DispatchMicroserviceQueue:
   #   Type: AWS::SQS::Queue
 
@@ -213,10 +192,6 @@ Outputs:
   InventoryMicroservice:
     Description: "InventoryMicroservice Lambda Function ARN"
     Value: !GetAtt InventoryMicroservice.Arn
-    
-  ReplenishInventoryMicroservice:
-    Description: "ReplenishInventoryMicroservice Lambda Function ARN"
-    Value: !GetAtt ReplenishInventoryMicroservice.Arn
   
   DispatchTable:
     Description: "RidesDispatch table id"
