@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "wild-rydes-async-msg-5"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-14o4ha2p0hf1k"
+s3_prefix = "wild-rydes-async-msg-5"
+region = "us-east-2"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
