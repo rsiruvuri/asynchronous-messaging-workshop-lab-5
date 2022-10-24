@@ -12,6 +12,12 @@ Globals:
       project: wild-rydes
       workshop: asynchronous-messaging-workshop
       author: aws
+      
+Parameters:
+	  CodeBucketArn:
+    Type: String
+  CodeKey:
+    Type: String
 
 Resources:
   SubmitRideCompletionFunction:
@@ -36,7 +42,30 @@ Resources:
   #   Type: AWS::SNS::Topic
   #   Properties:
   #     TopicName: RideManagementTopic
+  
+  # RideReplenishTopic:
+  #   Type: AWS::SNS::Topic
+  #   Properties:
+  #     TopicName: RideReplenishTopic
 
+  ReplinishInventoryFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: replinish-inventory-microservice/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+        #  TOPIC_ARN: !Ref RideReplenishTopic   
+      Policies:
+        # - SNSPublishMessagePolicy: # https://github.com/awslabs/serverless-application-model/blob/develop/samtranslator/policy_templates_data/policy_templates.json
+        #     TopicName: !GetAtt RideReplenishTopic.TopicName        
+      Events:
+        WildRydes:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /replinish-inventory-Service
+            Method: post
+            
   DispatchMicroservice:
     Type: AWS::Serverless::Function
     Properties:
@@ -121,27 +150,6 @@ Resources:
       #       Queue: !GetAtt InventoryMicroserviceQueue.Arn
       #       BatchSize: 1
 
-  ReplenishInventoryMicroservice:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
-    Properties:
-      CodeUri: replenish-inventory-microservice/
-      Handler: app.lambda_handler
-      Environment:
-        Variables:
-          SERVICE_NAME: ReplenishInventoryMicroservice        
-        #  TOPIC_ARN: !Ref RideReplenishTopic   
-      Policies:
-        # - SNSPublishMessagePolicy: # https://github.com/awslabs/serverless-application-model/blob/develop/samtranslator/policy_templates_data/policy_templates.json
-        #     TopicName: !GetAtt RideReplenishTopic.TopicName        
-
-  # RideReplenishTopic:
-  #   Type: AWS::SNS::Topic
-  #   Properties:
-  #     TopicName: RideReplenishTopic
-  #     Subscription:
-  #       Endpoint: "siruvuri@amazon.com"
-  #       Protocol: email  
-      
   # DispatchMicroserviceQueue:
   #   Type: AWS::SQS::Queue
 
@@ -194,6 +202,63 @@ Resources:
   #       RawMessageDelivery: true
   #       TopicArn: !Ref RideManagementTopic
 
+  KinesisInputStream:
+  	Type: 'AWS::Kinesis::Stream'
+  	Properties:
+  		Name: 'RideShareInputStream'
+  		RetentionPeriodHours: 24 
+  		ShardCount: 1
+  
+  KinesisOutputStream:
+  	Type: 'AWS::Kinesis::Stream'
+  	Properties:
+  		Name: 'RideShareOutputStream'
+  		ShardCount: 1
+  
+  KDAFlinkApplication:
+  	Type: 'AWS::KinesisAnalytics::Application'
+  	Properties:
+  		ApplicationName: 'RideStreamingAnalytics'
+  		ApplicationDescription: 'RideStreamingAnalytics'
+  		RuntimeEnvironment: FLINK-1_11
+  		ServiceExecutionRole: !GetAtt ServiceExecutionRole.Arn
+  		ApplicationConfiguration:
+  			ApplicationCodeConfiguration:
+  				CodeContent:
+  				S3ContentLocation:
+  					BucketARN: !Ref CodeBucketArn
+  					FileKey: !Ref CodeKey
+  					CodeContentType: ZIPFILE
+  			EnvironmentProperties:
+  				PropertyGroups:
+  				- PropertyGroupId: WindTurbineEnvironment
+  				PropertyMap:
+  					region: !Sub '${AWS::Region}'
+  					inputStreamName: !Ref rInputKinesisStream
+            outputStreamName: !Ref rOutputKinesisStream
+
+  ServiceExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: kinesisanalytics.amazonaws.com
+              Action: 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: s3-code-access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub "${CodeBucketArn}/${CodeKey}"
+
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
   # Find out more about other implicit resources you can reference within SAM
@@ -206,6 +271,10 @@ Outputs:
     Description: "SubmitRideCompletionFunction Lambda Function ARN"
     Value: !GetAtt SubmitRideCompletionFunction.Arn
 
+  ReplinishInventoryFunction:
+    Description: "ReplinishInventoryFunction Lambda Function ARN"
+    Value: !GetAtt ReplinishInventoryFunction.Arn
+    
   DispatchMicroservice:
     Description: "DispatchMicroservice Lambda Function ARN"
     Value: !GetAtt DispatchMicroservice.Arn
@@ -213,10 +282,6 @@ Outputs:
   InventoryMicroservice:
     Description: "InventoryMicroservice Lambda Function ARN"
     Value: !GetAtt InventoryMicroservice.Arn
-    
-  ReplenishInventoryMicroservice:
-    Description: "ReplenishInventoryMicroservice Lambda Function ARN"
-    Value: !GetAtt ReplenishInventoryMicroservice.Arn
   
   DispatchTable:
     Description: "RidesDispatch table id"
@@ -232,3 +297,13 @@ Outputs:
   # InventoryMicroserviceQueue:
   #   Description: "Amazon SQS queue ARN for the InventoryMicroservice queue"
   #   Value: !Ref InventoryMicroserviceQueue
+
+	RideShareInputStream:
+		Description: Input Kinesis Data Stream
+		Value: !GetAtt rInputKinesisStream.Arn
+	RideShareOutputStream:
+		Description: Output Kinesis Data Stream
+		Value: !GetAtt rOutputKinesisStream.Arn
+	RideStreamingAnalytics:
+		Description: Kinesis Data Analytics
+    Value: !Ref rKDAFlinkApplication
