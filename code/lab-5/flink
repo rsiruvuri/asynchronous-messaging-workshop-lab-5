@@ -1,0 +1,51 @@
+%flink.ssql
+
+    CREATE TABLE rides_share_analysis_input (
+                 eventName VARCHAR,
+                 tableName VARCHAR,
+                 arrival_time TIMESTAMP(3) METADATA FROM 'timestamp' VIRTUAL,
+                 dynamodb ROW(NewImage ROW(fare ROW(N INTEGER),region ROW(S STRING) )),
+                 
+                 WATERMARK FOR arrival_time AS arrival_time - INTERVAL '5' SECOND
+            ) WITH (
+                'connector' = 'kinesis',
+                'stream' = 'RideShareStream',
+                'aws.region' = 'us-east-2',
+                'scan.stream.initpos' = 'LATEST',
+                'format' = 'json',
+                'json.timestamp-format.standard' = 'ISO-8601'
+        );
+    
+    
+    
+%flink.ssql
+    
+    CREATE TABLE ride_share_analysis_output (
+                region STRING,
+                avg_fare INTEGER,
+                hop_time TIMESTAMP(3)
+            ) WITH (
+                'connector' = 'kinesis',
+                'stream' = 'RideShareStream-summary',
+                'aws.region' = 'us-east-2',
+                'scan.stream.initpos' = 'LATEST',
+                'format' = 'json',
+                'json.timestamp-format.standard' = 'ISO-8601'
+        );   
+
+
+%flink.ssql(type=update)
+    
+    SELECT AVG(dynamodb.NewImage.fare.N) AS avg_fare, dynamodb.NewImage.region.S AS region,
+    HOP_ROWTIME(arrival_time, INTERVAL '10' second, INTERVAL '1' minute) as hop_time
+    FROM rides_share_analysis_input
+    GROUP BY HOP(arrival_time, INTERVAL '10' second, INTERVAL '1' minute), dynamodb.NewImage.region.S
+
+        
+%flink.ssql(type=update)
+
+    INSERT INTO ride_share_analysis_output
+    SELECT  dynamodb.NewImage.region.S AS region,AVG(dynamodb.NewImage.fare.N) AS avg_fare,
+    HOP_ROWTIME(arrival_time, INTERVAL '10' second, INTERVAL '1' minute) as hop_time
+    FROM rides_share_analysis_input
+    GROUP BY HOP(arrival_time, INTERVAL '10' second, INTERVAL '1' minute), dynamodb.NewImage.region.S
